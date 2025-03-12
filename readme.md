@@ -1,5 +1,9 @@
 # DocTo
 
+Contributers
+====
+I am actively looking for contributers so if you are a Delphi (or VBA) programmer and interested in helping out, please send me a message or comment.
+
 Document Converter
 ====
 
@@ -14,7 +18,7 @@ Must have Microsoft Word, Excel or Powerpoint installed on host machine.
 
 Download Release From Github Releases - https://github.com/tobya/DocTo/releases/
 Further Information available at https://tobya.github.io/DocTo/
-Further Examples available at https://docto.toflidium.com
+
 
 
 ## Features
@@ -48,9 +52,9 @@ Also Available for [installation via Chocolatey ](https://chocolatey.org/package
 
 > choco install docto
 
-to upgrade to latest version before generally available (replace with current version)
+to upgrade to latest version
 
-> choco upgrade docto --version=1.6
+> choco upgrade docto 
 
 ### Node
 
@@ -139,7 +143,7 @@ https://webapps.stackexchange.com/questions/74859/what-format-does-word-online-u
           --visio
       -F  Input File or Directory
           --inputfile
-      -FX Input Extension to search for if directory. (.rtf .txt etc)
+      -FX Input file search for if -f is directory. Can use .rtf test*.txt etc
           Default ".doc*" (will find ".docx" also)
           --inputextension
       -O  Output File or Directory to place converted Docs
@@ -151,6 +155,7 @@ https://webapps.stackexchange.com/questions/74859/what-format-does-word-online-u
           Available from
           https://docs.microsoft.com/en-us/dotnet/api/microsoft.office.interop.word.wdsaveformat
           or https://docs.microsoft.com/en-us/dotnet/api/microsoft.office.interop.excel.xlfileformat
+          or https://docs.microsoft.com/en-us/office/vba/api/powerpoint.presentation.saveas
           See current List Below.
           --format
       -TF Force Format. -T value if an integer, is checked against current list
@@ -476,9 +481,8 @@ Create PDF to the ISO 19005-1 standard, also know as PDF-A or PDF Archive.
 ### Do not ignore __MACOSX Directory
 > -M --ignoreMACOS {true|false}
 
-By default DocTo ignores any files in a hidden `__MACOSX` directory that MACOS creates.  This directory is oftern 
-present on an external disk that is shared between systesm.  If you wish to check this dir 
-set this value. You must specify value eg `-M false`.
+By default DocTo ignores any files in a hidden `__MACOSX` directory that MACOS creates.  This directory is often 
+present on an external disk that is shared between systems.  If you wish to check this dir set this value. You must specify value eg `-M false`.
 
 
 Compiling
@@ -496,4 +500,8 @@ XLSTo is now incorporated into DocTo.  Previously XLSTo was a seperate EXE that 
  I am happy to accept any PR anyone might like to submit.  If a large amount of work involved, please open an issue first to ensure the effort wont be wasted.
 
  The main branch name in the repo is `DocTo`
+
+ ### Tests
+
+ I have started to write functional tests in PHP to check if the application is manipulating documents correctly.  If you are familiar with PHP Laravel and Pest I would love some extra tests.
 

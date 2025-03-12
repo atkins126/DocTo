@@ -13,7 +13,7 @@ IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMA
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ****************************************************************)
 interface
-uses Classes, MainUtils, ResourceUtils,  ActiveX, ComObj, WinINet, Variants, sysutils, Types, StrUtils,Word_TLB_Constants;
+uses Classes, MainUtils, ResourceUtils,  ActiveX, ComObj, WinINet, Variants, sysutils, Types, StrUtils,Word_TLB_Constants, TypInfo;
 
 type
 
@@ -152,13 +152,22 @@ var
   NonsensePassword : OleVariant;
 
   ExitAction : TExitAction;
-
+  WordA, WordB, WordC : String;
+  disp : IDispatch;
+  MethodIndex : integer;
 
 begin
         ExitAction := aSave;
         Result.Successful := false;
         Result.InputFile := fileToConvert;
         logInfo('ExecuteConversion:' + fileToConvert, Verbose);
+
+        // disable auto running of vba in word
+        if (fDontUseAutoVBA) then
+        begin
+            logInfo('DisableAutoMacros:' + fileToConvert, Verbose);
+            WordApp.WordBasic.DisableAutoMacros;
+        end;
 
         // Check if document has password as per
         // https://wordmvp.com/FAQs/MacrosVBA/CheckIfPWProtectB4Open.htm
@@ -214,6 +223,7 @@ begin
 
 
         end;
+
 
 
         // Encoding can be set.  If a HTML type, then additional values
@@ -345,9 +355,6 @@ begin
               Result.Error := '';
              // loginfo('FileCreated: ' + OutputFilename, STANDARD);
        finally
-
-
-
 
             // Close the document - do not save changes if doc has changed in any way.
             Wordapp.activedocument.Close(wdDoNotSaveChanges);

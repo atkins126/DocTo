@@ -8,10 +8,13 @@ The above copyright notice, and every other copyright notice found in this softw
 THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
 IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Intereting article
+https://support.microsoft.com/en-gb/topic/considerations-for-server-side-automation-of-office-48bcfe93-8a89-47f1-0bce-017433ad79e2
 ****************************************************************)
 interface
 uses  classes, Windows, sysutils, ActiveX, ComObj, WinINet, Variants, iduri,
-      Types,  ResourceUtils,
+      Types,  ResourceUtils,           StrUtils,
       PathUtils, ShellAPI, datamodssl, Word_TLB_Constants;
 
 Const
@@ -30,8 +33,8 @@ Const
   MSVISIO = 4;
 
   
-  DOCTO_VERSION = '1.8.39';  // dont use 0x - choco needs incrementing versions.
-  DOCTO_VERSION_NOTE = ' (Test version )';
+  DOCTO_VERSION = '1.15.45';  // dont use 0x - choco needs incrementing versions.
+  DOCTO_VERSION_NOTE = ' x64 Release ';
 type
 
 
@@ -134,8 +137,7 @@ type
     FAppID : Integer;
     FPdfExportRange_Word: Integer;
     FuseISO190051 : Boolean;
-
-
+    fDontUseAutoVBA : Boolean;
 
     FOutputIsFile: Boolean;
     FOutputIsDir: Boolean;
@@ -238,14 +240,14 @@ type
     procedure Log(Msg: String; Level  : Integer = ERRORS); overload;
 
     procedure Log(Msg: String; List:  TStrings; Level: Integer); overload;
-        procedure LogInfo(Msg: String; Level  : Integer = ERRORS);
-        procedure LogDebug(Msg: String; Level  : Integer = ERRORS);
+    procedure LogInfo(Msg: String; Level  : Integer = ERRORS);
+    procedure LogDebug(Msg: String; Level  : Integer = ERRORS);
     procedure LogError(Msg: String);
     function ConvertErrorText(Msg: String) : String;
     function CallWebHook(Params: String) : string;
     FUNCTION AfterConversion(InputFile, OutputFile: String):string;
     Function OnConversionError(InputFile, OutputFile, Error: String):string;
-
+    Procedure LoadFileList();
 
     procedure LogResourceHelp(HelpResName : String);
     procedure LogVersionInfo(ForceReload : boolean = true);
@@ -515,6 +517,9 @@ begin
   FDocStructureTags := true;
   FBitmapMissingFonts := true;
   FInputFiles := TStringList.Create;
+  fDontUseAutoVBA := true;
+
+
 end;
 
 destructor TDocumentConverter.Destroy;
@@ -571,15 +576,20 @@ begin
     if not DoExecute  then HaltWithError(201, 'Input File, Output File and FileFormat must all be specified');
 
     // Set Output Filename if Dir Provided.
-    if (InputIsFile and OutputIsDir) then
+    if ( OutputIsDir) then
     begin
       if OutputExt = '' then
       begin
-        OutputExt := '.' + FormatsExtensions.Values[OutputFileFormatString];
+        OutputExt := '.' +  FormatsExtensions.Values[OutputFileFormatString];
         loginfo('Output Extension is ' + outputExt, CHATTY);
       end;
 
-      OutputFile :=  OutputFile  + ChangeFileExt( ExtractFileName(InputFile),OutputExt);
+      if InputIsFile then
+      begin
+        OutputFile :=  OutputFile  + ChangeFileExt( ExtractFileName(InputFile),OutputExt);
+      end;
+
+
     end;
 
     // Add file to InputFiles List if only one.
@@ -644,6 +654,7 @@ begin
 
             StartTime := GettickCount();
              logdebug('Executing Conversion ... ',VERBOSE);
+                          logdebug('Executing Conversion ... ' + FileToCreate,VERBOSE);
             ConversionInfo :=  ExecuteConversion(FileToConvert, FileToCreate, OutputFileFormat);
 
             if ConversionInfo.Successful then
@@ -660,11 +671,14 @@ begin
               // Check if file needs to be deleted.
               if RemoveFileOnConvert then
               begin
-                // Check file exists and Delete if requested
-                if FileExists(FileToCreate) then
+                // Check file has been converted and Delete if requested
+                if FileExists(ConversionInfo.OutputFile) then
                 begin
-                  DeleteFile(FileToConvert);
-                  Loginfo('Deleted:' + FileToConvert,STANDARD);
+                  if FileExists(ConversionInfo.InputFile) then
+                  begin
+                     DeleteFile(ConversionInfo.InputFile);
+                     Loginfo('Deleted:' + ConversionInfo.InputFile,STANDARD);
+                  end;
                 end;
               end;
 
@@ -1036,7 +1050,9 @@ if  (id = '-XL') or
       dec(iparam);
     END
     else if (id = '-FX') or
-            (id = '--INPUTFILEEXTENSION') then
+            (id = '--INPUTFILEEXTENSION') or
+            (id = '--INPUTFILTER')
+            then
     begin
       InputExtension := value;
     end
@@ -1262,6 +1278,18 @@ if  (id = '-XL') or
       halt(2);
 
     end
+    else if (id = '--ENABLE-MACROAUTORUN') or
+            (id = '--ENABLE-WORDVBAAUTO')
+    then
+    begin
+      fDontUseAutoVBA := false;
+      if (OfficeAppName <> 'Word')then
+      begin
+      // Excel   Application.EnableEvents = False
+      //  HaltWithError(301,'Parameter '  + id + ' not Implemented for ' + OfficeAppName );
+      end;
+
+    end
     else if (id = '-X') or
             (id = '--HALTERROR') then
     begin
@@ -1335,6 +1363,20 @@ if  (id = '-XL') or
 
   // Code to run when all parameters have been loaded.
   // Get Files
+     LoadFileList;
+
+
+
+end;
+
+
+
+procedure TDocumentConverter.LoadFileList();
+var f : integer;
+found :boolean;
+afile :string;
+begin
+
 
    // IsFileInput := true;
     // If input is Dir rather than file, enumerate files.
@@ -1348,19 +1390,44 @@ if  (id = '-XL') or
        begin
          HaltWithError(204, 'No File Matches in Input Directory: ' + finputfile + '*' + InputExtension );
        end;
-       log('File List', FInputFiles,STANDARD);
-       logInfo('Beginning to convert files....',STANDARD);
+
+
+       // remove temp files
+       // do in reverse order to allow deleting of items
+       for f :=  FInputFiles.Count -1 downto 0 do
+       begin
+         found := false;
+         afile := FInputFiles[f];
+       // check for start of dir then filename check.
+         if Pos('\.~' ,afile) > 0 then
+         begin
+           Found := true;
+         end;
+
+         if Pos('\~$',afile) > 0 then
+         begin
+           found := true;
+         end;
+
+         if found then
+         begin
+          Log('Removing temp file: ' + afile , VERBOSE );
+           FInputFiles.Delete(f);
+         end;
+
+
+       end;
+
     end
     else
     begin
       InputIsFile := true;
     end;
 
-
+       log('File List', FInputFiles,STANDARD);
+       logInfo('Beginning to convert files....',STANDARD);
 
 end;
-
-
 
 procedure TDocumentConverter.Log(Msg: String; Level : Integer = ERRORS );
 var
